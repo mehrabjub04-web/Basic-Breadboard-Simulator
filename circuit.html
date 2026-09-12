@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Breadboard Lab — Circuit Simulator</title>
+<style>
+  :root{
+    --bench:#2b2f36; --bench2:#23262c;
+    --board:#e9e2c9; --board-edge:#c9bf9c;
+    --rail-red:#c0392b; --rail-blue:#2b5fae;
+    --hole:#3a3530; --hole-hi:#f2c94c;
+    --panel:#1d2025; --panel2:#252932;
+    --ink:#e7e6e1; --dim:#9aa0ab;
+    --accent:#f2994a; --accent2:#56c596;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 700px at 20% -10%, #363c46 0%, transparent 60%),
+      var(--bench);
+    color:var(--ink); font-family:'Segoe UI',Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column;
+  }
+  header{
+    padding:14px 22px; border-bottom:1px solid #3a3f47;
+    display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+  }
+  header h1{font-size:1.15em; margin:0; letter-spacing:.2px; font-weight:600}
+  header .tagline{color:var(--dim); font-size:.85em}
+  .layout{display:flex; flex:1; min-height:0}
+  .toolbar{
+    width:250px; background:var(--panel); border-right:1px solid #3a3f47;
+    padding:16px; overflow-y:auto; flex-shrink:0;
+  }
+  .toolbar h2{font-size:.72em; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:18px 0 8px}
+  .toolbar h2:first-child{margin-top:0}
+  .tool-btn{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:var(--panel2); border:1px solid #383d47; color:var(--ink);
+    padding:9px 10px; border-radius:8px; margin-bottom:6px; cursor:pointer;
+    font-size:.88em; transition:.12s;
+  }
+  .tool-btn:hover{border-color:#565f6e}
+  .tool-btn.active{background:#3a3220; border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset}
+  .tool-btn .ico{width:20px; text-align:center; font-size:1.05em}
+  .value-row{display:flex; align-items:center; gap:8px; margin:8px 0 14px; padding:8px 10px; background:#171a1f; border-radius:8px; border:1px solid #313640}
+  .value-row label{font-size:.78em; color:var(--dim); flex-shrink:0}
+  .value-row input, .value-row select{
+    width:100%; background:#0f1115; border:1px solid #3a3f47; color:var(--ink);
+    padding:5px 7px; border-radius:5px; font-family:var(--mono); font-size:.85em;
+  }
+  .hint{font-size:.76em; color:var(--dim); line-height:1.5; margin-top:6px}
+  .board-wrap{
+    flex:1; overflow:auto; display:flex; align-items:flex-start; justify-content:center;
+    padding:34px 20px;
+  }
+  svg#board{filter:drop-shadow(0 14px 30px rgba(0,0,0,.45)); cursor:default}
+  .sidebar{
+    width:290px; background:var(--panel); border-left:1px solid #3a3f47;
+    padding:16px; overflow-y:auto; flex-shrink:0;
+  }
+  .sidebar h2{font-size:.72em; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); margin:0 0 10px}
+  .status{
+    padding:10px 12px; border-radius:8px; font-size:.82em; line-height:1.5; margin-bottom:16px;
+    background:#12241c; border:1px solid #275c43; color:#8fe0bb;
+  }
+  .status.err{background:#2b1717; border-color:#7a3030; color:#f2a5a5}
+  .clist{display:flex; flex-direction:column; gap:8px; margin-bottom:18px}
+  .citem{
+    background:var(--panel2); border:1px solid #383d47; border-radius:8px; padding:8px 10px;
+    display:flex; align-items:center; justify-content:space-between; font-size:.82em;
+  }
+  .citem .desc{display:flex; flex-direction:column; gap:2px}
+  .citem .name{color:var(--ink)}
+  .citem .val{color:var(--dim); font-family:var(--mono); font-size:.86em}
+  .citem .reading{font-family:var(--mono); color:var(--accent2); font-weight:600}
+  .citem button{
+    background:none; border:none; color:#c65b5b; cursor:pointer; font-size:1em; padding:2px 6px;
+  }
+  .empty{color:var(--dim); font-size:.82em; font-style:italic}
+  button.wide{
+    width:100%; padding:8px; border-radius:8px; border:1px solid #4a3020; background:#3a2416; color:#ffcf9e;
+    cursor:pointer; font-size:.85em; margin-top:6px;
+  }
+  button.wide:hover{background:#4a2e1c}
+  .legend{font-size:.74em; color:var(--dim); line-height:1.7; margin-top:14px; border-top:1px solid #313640; padding-top:12px}
+  .legend b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔌 Breadboard Lab</h1>
+  <span class="tagline">real breadboard wiring rules · live DC circuit solver · resistors, meters &amp; sources</span>
+</header>
+
+<div class="layout">
+
+  <div class="toolbar">
+    <h2>Place component</h2>
+    <button class="tool-btn" data-tool="wire"><span class="ico">➰</span> Jumper wire</button>
+    <button class="tool-btn" data-tool="resistor"><span class="ico">🟫</span> Resistor</button>
+    <button class="tool-btn" data-tool="battery"><span class="ico">🔋</span> Voltage source</button>
+    <button class="tool-btn" data-tool="currentsource"><span class="ico">⭕</span> Current source</button>
+    <button class="tool-btn" data-tool="ammeter"><span class="ico">Ⓐ</span> Ammeter</button>
+    <button class="tool-btn" data-tool="voltmeter"><span class="ico">Ⓥ</span> Voltmeter</button>
+    <button class="tool-btn" data-tool="delete"><span class="ico">✕</span> Delete component</button>
+
+    <div id="valuePanel"></div>
+
+    <h2>Board</h2>
+    <button class="tool-btn" id="clearBtn"><span class="ico">🗑</span> Clear breadboard</button>
+
+    <div class="legend">
+      <b>How to place:</b> pick a tool, then click two holes on the board (first click = lead 1 / <b>+</b> terminal for sources, second click = lead 2 / <b>−</b>).<br><br>
+      <b>How the board wires up:</b> each 5-hole column in a terminal strip (A–E or F–J) is one electrical node — exactly like a real breadboard. The two power rails run the full length. Use jumper wires to bridge across the centre gap or to the rails.
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <svg id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
+
+  <div class="sidebar">
+    <h2>Circuit status</h2>
+    <div class="status" id="status">Place a source and a resistor to begin.</div>
+
+    <h2>Components</h2>
+    <div class="clist" id="clist"><div class="empty">No components placed yet.</div></div>
+
+    <div class="legend">
+      <b>Reading sign:</b> a meter shows current/voltage from lead 1 → lead 2. A negative reading just means real current/voltage flows the other way — exactly like a real meter with reversed probes.
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================= BREADBOARD GEOMETRY ============================= */
+const COLS = 32;
+const COL_SPACING = 22;
+const START_X = 46;
+const HOLE_R = 2.6;
+
+const ROW_Y = {
+  'TR+': 40, 'TR-': 62,
+  'A': 112, 'B': 134, 'C': 156, 'D': 178, 'E': 200,
+  'F': 252, 'G': 274, 'H': 296, 'I': 318, 'J': 340,
+  'BR+': 388, 'BR-': 410
+};
+const TOP_ROWS = ['A','B','C','D','E'];
+const BOT_ROWS = ['F','G','H','I','J'];
+const RAIL_ROWS = ['TR+','TR-','BR+','BR-'];
+const ALL_ROWS = ['TR+','TR-','A','B','C','D','E','F','G','H','I','J','BR+','BR-'];
+
+const BOARD_W = START_X + (COLS-1)*COL_SPACING + 46;
+const BOARD_H = 448;
+
+function xOf(col){ return START_X + (col-1)*COL_SPACING; }
+function yOf(row){ return ROW_Y[row]; }
+
+// hole registry
+const holes = {}; // id -> {row,col,x,y}
+ALL_ROWS.forEach(row=>{
+  for(let c=1;c<=COLS;c++){
+    const id = row+c;
+    holes[id] = {id, row, col:c, x:xOf(c), y:yOf(row)};
+  }
+});
+
+function baseNode(hole){
+  if(RAIL_ROWS.includes(hole.row)) return hole.row;
+  if(TOP_ROWS.includes(hole.row)) return 'T'+hole.col;
+  return 'X'+hole.col; // F-J bottom half
+}
+
+/* ============================= STATE ============================= */
+let components = []; // {id,type,h1,h2,value,color}
+let compSeq = 1;
+let currentTool = null;
+let pendingHole = null;
+let currentValue = 1000; // ohms / volts / amps depending on tool
+const WIRE_COLORS = ['#e94f4f','#f2c14e','#4fb0e9','#4fe98a','#c084f5','#f58c4c','#5be0c5'];
+let wireColorIdx = 0;
+
+const TOOL_DEFAULTS = {
+  resistor: {value:1000, label:'Resistance (Ω)', min:1, step:100},
+  battery: {value:5, label:'Voltage (V)', min:-100, step:0.5},
+  currentsource: {value:0.01, label:'Current (A)', min:-10, step:0.001},
+};
+
+/* ============================= SVG SETUP ============================= */
+const svg = document.getElementById('board');
+svg.setAttribute('viewBox', `0 0 ${BOARD_W} ${BOARD_H}`);
+svg.setAttribute('width', BOARD_W);
+svg.setAttribute('height', BOARD_H);
+
+function svgEl(tag, attrs){
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for(const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function buildBoardChrome(){
+  // board body
+  svg.appendChild(svgEl('rect',{x:6,y:6,width:BOARD_W-12,height:BOARD_H-12,rx:14,fill:'#efe7cc',stroke:'#bdb28c','stroke-width':1.5}));
+  svg.appendChild(svgEl('rect',{x:6,y:6,width:BOARD_W-12,height:BOARD_H-12,rx:14,fill:'none',stroke:'#00000022','stroke-width':10}));
+
+  // rail stripes
+  function railStripe(row, color){
+    const y = yOf(row);
+    svg.appendChild(svgEl('line',{x1:START_X-14,y1:y,x2:xOf(COLS)+14,y2:y,stroke:color,'stroke-width':2,opacity:.55}));
+  }
+  railStripe('TR+', '#c0392b');
+  railStripe('TR-', '#2b5fae');
+  railStripe('BR+', '#c0392b');
+  railStripe('BR-', '#2b5fae');
+
+  // rail +/- symbols (every 5 cols)
+  for(let c=3;c<=COLS;c+=5){
+    svg.appendChild(text(xOf(c), yOf('TR+')-2, '+', '#c0392b', 11, true));
+    svg.appendChild(text(xOf(c), yOf('TR-')+14, '−', '#2b5fae', 12, true));
+    svg.appendChild(text(xOf(c), yOf('BR+')-2, '+', '#c0392b', 11, true));
+    svg.appendChild(text(xOf(c), yOf('BR-')+14, '−', '#2b5fae', 12, true));
+  }
+
+  // center gap label
+  svg.appendChild(svgEl('rect',{x:START_X-16,y:yOf('E')+14,width:xOf(COLS)-START_X+32,height:yOf('F')-yOf('E')-28,fill:'#00000008'}));
+
+  // row letters (left margin)
+  [...TOP_ROWS, ...BOT_ROWS].forEach(row=>{
+    svg.appendChild(text(START_X-30, yOf(row)+4, row, '#7a7156', 10, false));
+  });
+
+  // column numbers
+  for(let c=5;c<=COLS;c+=5){
+    svg.appendChild(text(xOf(c), yOf('A')-14, c, '#7a7156', 9, false));
+    svg.appendChild(text(xOf(c), yOf('J')+20, c, '#7a7156', 9, false));
+  }
+
+  function text(x,y,t,fill,size,bold){
+    const el = svgEl('text',{x,y,fill,'font-size':size,'text-anchor':'middle','font-family':'Consolas, Menlo, monospace'});
+    if(bold) el.setAttribute('font-weight','700');
+    el.textContent = t;
+    return el;
+  }
+}
+buildBoardChrome();
+
+const holesLayer = svgEl('g',{id:'holesLayer'});
+const compLayer = svgEl('g',{id:'compLayer'});
+const overlayLayer = svgEl('g',{id:'overlayLayer'});
+svg.appendChild(holesLayer);
+svg.appendChild(compLayer);
+svg.appendChild(overlayLayer);
+
+function drawHoles(){
+  holesLayer.innerHTML = '';
+  Object.values(holes).forEach(h=>{
+    const c = svgEl('circle',{cx:h.x,cy:h.y,r:HOLE_R,fill:'#4a4032','stroke':'#2c2619','stroke-width':.6,cursor:'pointer','data-hole':h.id});
+    c.addEventListener('click', ()=>onHoleClick(h.id));
+    c.addEventListener('mouseenter', ()=>{ if(currentTool && currentTool!=='delete') c.setAttribute('r', HOLE_R+1.6); });
+    c.addEventListener('mouseleave', ()=>{ c.setAttribute('r', HOLE_R); });
+    holesLayer.appendChild(c);
+  });
+}
+drawHoles();
+
+/* ============================= TOOLBAR ============================= */
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const t = btn.getAttribute('data-tool');
+    selectTool(currentTool===t ? null : t);
+  });
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  components = []; pendingHole = null; clearSelection(); renderComponents(); renderList(); simulate();
+});
+
+function selectTool(t){
+  currentTool = t;
+  pendingHole = null;
+  clearSelection();
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+    b.classList.toggle('active', b.getAttribute('data-tool')===t);
+  });
+  renderValuePanel();
+}
+
+function renderValuePanel(){
+  const panel = document.getElementById('valuePanel');
+  panel.innerHTML = '';
+  const def = TOOL_DEFAULTS[currentTool];
+  if(!def){ return; }
+  currentValue = def.value;
+  const row = document.createElement('div');
+  row.className = 'value-row';
+  row.innerHTML = `<label>${def.label}</label>
+    <input type="number" id="valInput" value="${def.value}" step="${def.step}">`;
+  panel.appendChild(row);
+  document.getElementById('valInput').addEventListener('input', e=>{
+    currentValue = parseFloat(e.target.value);
+  });
+  const hint = document.createElement('div');
+  hint.className='hint';
+  if(currentTool==='resistor') hint.textContent = 'Click two holes to place. Color bands are drawn automatically from the value.';
+  else if(currentTool==='battery') hint.textContent = 'First hole = + terminal, second hole = − terminal.';
+  else if(currentTool==='currentsource') hint.textContent = 'First hole = current exits here (+), second hole = current returns (−).';
+  panel.appendChild(hint);
+}
+
+/* ============================= PLACEMENT ============================= */
+function clearSelection(){
+  Object.values(holes).forEach(h=>{});
+  const hi = document.querySelector('[data-hole-highlight]');
+  overlayLayer.innerHTML = '';
+}
+
+function onHoleClick(holeId){
+  if(!currentTool) return;
+
+  if(currentTool==='delete'){
+    return; // handled by clicking component itself
+  }
+
+  if(pendingHole===null){
+    pendingHole = holeId;
+    overlayLayer.innerHTML = '';
+    const h = holes[holeId];
+    overlayLayer.appendChild(svgEl('circle',{cx:h.x,cy:h.y,r:6,fill:'none',stroke:'#f2c94c','stroke-width':2}));
+    return;
+  }
+
+  if(pendingHole===holeId){ // clicked same hole twice -> cancel
+    pendingHole = null;
+    overlayLayer.innerHTML = '';
+    return;
+  }
+
+  const h1 = pendingHole, h2 = holeId;
+  pendingHole = null;
+  overlayLayer.innerHTML = '';
+
+  const comp = {id:'c'+(compSeq++), type:currentTool, h1, h2};
+  if(currentTool==='wire'){ comp.color = WIRE_COLORS[wireColorIdx++ % WIRE_COLORS.length]; }
+  if(currentTool==='resistor' || currentTool==='battery' || currentTool==='currentsource'){
+    comp.value = isFinite(currentValue) ? currentValue : (TOOL_DEFAULTS[currentTool].value);
+  }
+  components.push(comp);
+  renderComponents();
+  renderList();
+  simulate();
+}
+
+/* clicking a component (for delete tool) */
+function onComponentClick(compId){
+  if(currentTool==='delete'){
+    components = components.filter(c=>c.id!==compId);
+    renderComponents(); renderList(); simulate();
+  }
+}
+
+/* ============================= RESISTOR COLOR CODE ============================= */
+const BAND_COLORS = ['#000000','#7a4a1e','#d33b2c','#e0812b','#e8c93c','#3f9142','#2e5fb0','#8a4fbf','#8c8c8c','#ffffff'];
+const MULT_EXTRA = {'-1':'#d4af37','-2':'#c0c0c0'}; // gold/silver for <100
+function resistorBands(value){
+  value = Math.max(1, Math.abs(value));
+  let exp = Math.floor(Math.log10(value));
+  let mantissa = value / Math.pow(10, exp);
+  let d1d2 = Math.round(mantissa*10);
+  if(d1d2>=100){ d1d2 = Math.round(d1d2/10); exp+=1; }
+  const digit1 = Math.floor(d1d2/10);
+  const digit2 = d1d2%10;
+  const mult = exp-1;
+  const c1 = BAND_COLORS[digit1] || '#000';
+  const c2 = BAND_COLORS[digit2] || '#000';
+  const c3 = (mult>=0 && mult<=9) ? BAND_COLORS[mult] : (MULT_EXTRA[String(mult)] || '#000');
+  return [c1,c2,c3,'#d4af37'];
+}
+
+/* ============================= RENDER COMPONENTS ============================= */
+function midpoint(h1,h2){
+  const a = holes[h1], b = holes[h2];
+  return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, dx:b.x-a.x, dy:b.y-a.y, len:Math.hypot(b.x-a.x,b.y-a.y), ang:Math.atan2(b.y-a.y,b.x-a.x)};
+}
+
+function renderComponents(){
+  compLayer.innerHTML = '';
+  components.forEach(c=>{
+    const g = svgEl('g',{'data-comp':c.id, cursor: currentTool==='delete' ? 'pointer':'default'});
+    g.addEventListener('click', ()=>onComponentClick(c.id));
+    const a = holes[c.h1], b = holes[c.h2];
+    const m = midpoint(c.h1,c.h2);
+
+    if(c.type==='wire'){
+      const midY = m.y - Math.min(26, m.len*0.28);
+      const path = `M${a.x},${a.y} Q${m.x},${midY} ${b.x},${b.y}`;
+      g.appendChild(svgEl('path',{d:path, stroke:'#000', 'stroke-width':5, fill:'none', opacity:.18}));
+      g.appendChild(svgEl('path',{d:path, stroke:c.color, 'stroke-width':3.2, fill:'none', 'stroke-linecap':'round'}));
+      g.appendChild(svgEl('circle',{cx:a.x,cy:a.y,r:3.6,fill:c.color}));
+      g.appendChild(svgEl('circle',{cx:b.x,cy:b.y,r:3.6,fill:c.color}));
+    }
+    else if(c.type==='resistor'){
+      leads(g,a,b,14);
+      const w=26,h=9;
+      const t = svgEl('g',{transform:`translate(${m.x},${m.y}) rotate(${m.ang*180/Math.PI})`});
+      t.appendChild(svgEl('rect',{x:-w/2,y:-h/2,width:w,height:h,rx:3,fill:'#e8d3a0',stroke:'#8a6a3a','stroke-width':1}));
+      const bands = resistorBands(c.value);
+      bands.slice(0,3).forEach((col,i)=>{
+        t.appendChild(svgEl('rect',{x:-w/2+5+i*6,y:-h/2,width:3,height:h,fill:col}));
+      });
+      g.appendChild(t);
+      g.appendChild(label(m.x, m.y-12, formatOhms(c.value)));
+    }
+    else if(c.type==='battery'){
+      leads(g,a,b,16);
+      const t = svgEl('g',{transform:`translate(${m.x},${m.y}) rotate(${m.ang*180/Math.PI})`});
+      t.appendChild(svgEl('rect',{x:-16,y:-11,width:32,height:22,rx:4,fill:'#2c313a',stroke:'#0e1013','stroke-width':1}));
+      t.appendChild(svgEl('line',{x1:-6,y1:-7,x2:-6,y2:7,stroke:'#f2c94c','stroke-width':3}));
+      t.appendChild(svgEl('line',{x1:5,y1:-4,x2:5,y2:4,stroke:'#f2c94c','stroke-width':1.6}));
+      g.appendChild(t);
+      g.appendChild(label(a.x + (a.x<b.x?-10:10), a.y-8, '+', '#e94f4f', 11, true));
+      g.appendChild(label(b.x + (b.x<a.x?-10:10), b.y-8, '−', '#4fb0e9', 12, true));
+      g.appendChild(label(m.x, m.y-16, c.value+' V'));
+    }
+    else if(c.type==='currentsource'){
+      leads(g,a,b,14);
+      const t = svgEl('g',{transform:`translate(${m.x},${m.y}) rotate(${m.ang*180/Math.PI})`});
+      t.appendChild(svgEl('circle',{r:12,fill:'#2c313a',stroke:'#0e1013','stroke-width':1}));
+      t.appendChild(svgEl('path',{d:'M-6,0 L5,0 M1,-4 L6,0 L1,4', stroke:'#f2c94c','stroke-width':1.8, fill:'none','stroke-linecap':'round','stroke-linejoin':'round'}));
+      g.appendChild(t);
+      g.appendChild(label(m.x, m.y-16, formatAmps(c.value)));
+    }
+    else if(c.type==='ammeter' || c.type==='voltmeter'){
+      leads(g,a,b,14);
+      const t = svgEl('g',{transform:`translate(${m.x},${m.y})`});
+      const isA = c.type==='ammeter';
+      t.appendChild(svgEl('circle',{r:11,fill:'#1b2f26',stroke: isA?'#56c596':'#4fb0e9','stroke-width':1.6}));
+      t.appendChild(label(0,4, isA?'A':'V', isA?'#56c596':'#4fb0e9', 11, true, true));
+      g.appendChild(t);
+      const rdg = c.reading===null||c.reading===undefined ? '—' : (isA? formatAmps(c.reading) : formatVolts(c.reading));
+      g.appendChild(label(m.x, m.y-16, rdg, isA?'#56c596':'#4fb0e9', 10, true));
+    }
+    compLayer.appendChild(g);
+  });
+
+  function leads(g,a,b,gap){
+    g.appendChild(svgEl('line',{x1:a.x,y1:a.y,x2:b.x,y2:b.y, stroke:'#5a5348','stroke-width':2.4}));
+  }
+  function label(x,y,t,fill,size,bold,centered){
+    const el = svgEl('text',{x,y,'text-anchor':'middle', 'font-family':'Consolas, Menlo, monospace', fill: fill||'#efe7cc', 'font-size': size||9});
+    if(bold) el.setAttribute('font-weight','700');
+    el.textContent = t;
+    return el;
+  }
+}
+
+function formatOhms(v){
+  const av=Math.abs(v);
+  if(av>=1e6) return (v/1e6)+' MΩ';
+  if(av>=1e3) return (v/1e3)+' kΩ';
+  return v+' Ω';
+}
+function formatAmps(v){
+  const av=Math.abs(v);
+  if(av<1e-6) return (v*1e9).toFixed(2)+' nA';
+  if(av<1e-3) return (v*1e6).toFixed(2)+' µA';
+  if(av<1) return (v*1e3).toFixed(2)+' mA';
+  return v.toFixed(3)+' A';
+}
+function formatVolts(v){
+  const av=Math.abs(v);
+  if(av<1e-3 && av>0) return (v*1e3).toFixed(2)+' mV';
+  return v.toFixed(3)+' V';
+}
+
+/* ============================= COMPONENT LIST SIDEBAR ============================= */
+const TYPE_LABELS = {wire:'Wire', resistor:'Resistor', battery:'Voltage source', currentsource:'Current source', ammeter:'Ammeter', voltmeter:'Voltmeter'};
+function renderList(){
+  const list = document.getElementById('clist');
+  if(components.length===0){ list.innerHTML = '<div class="empty">No components placed yet.</div>'; return; }
+  list.innerHTML = '';
+  components.forEach(c=>{
+    const el = document.createElement('div');
+    el.className='citem';
+    let valTxt = '';
+    if(c.type==='resistor') valTxt = formatOhms(c.value);
+    else if(c.type==='battery') valTxt = c.value+' V';
+    else if(c.type==='currentsource') valTxt = formatAmps(c.value);
+    else valTxt = c.h1+' → '+c.h2;
+
+    let readingTxt = '';
+    if(c.type==='ammeter') readingTxt = c.reading==null ? '—' : formatAmps(c.reading);
+    if(c.type==='voltmeter') readingTxt = c.reading==null ? '—' : formatVolts(c.reading);
+
+    el.innerHTML = `<div class="desc">
+        <span class="name">${TYPE_LABELS[c.type]}</span>
+        <span class="val">${c.h1} → ${c.h2}${valTxt && c.type!=='wire' ? ' · '+valTxt : ''}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${readingTxt ? `<span class="reading">${readingTxt}</span>` : ''}
+        <button title="Delete">✕</button>
+      </div>`;
+    el.querySelector('button').addEventListener('click', ()=>{
+      components = components.filter(x=>x.id!==c.id);
+      renderComponents(); renderList(); simulate();
+    });
+    list.appendChild(el);
+  });
+}
+
+/* ============================= UNION-FIND ============================= */
+function makeUF(){
+  const parent = {};
+  function find(x){
+    if(!(x in parent)) parent[x]=x;
+    while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; }
+    return x;
+  }
+  function union(a,b){
+    const ra=find(a), rb=find(b);
+    if(ra!==rb) parent[ra]=rb;
+  }
+  return {find,union};
+}
+
+/* ============================= LINEAR SOLVER (Gaussian elimination) ============================= */
+function solveLinear(A, z){
+  const n = z.length;
+  // augmented
+  for(let col=0; col<n; col++){
+    // partial pivot
+    let piv = col;
+    for(let r=col+1;r<n;r++){ if(Math.abs(A[r][col])>Math.abs(A[piv][col])) piv=r; }
+    if(Math.abs(A[piv][col]) < 1e-12) return null; // singular
+    if(piv!==col){ [A[piv],A[col]]=[A[col],A[piv]]; [z[piv],z[col]]=[z[col],z[piv]]; }
+    for(let r=0;r<n;r++){
+      if(r===col) continue;
+      const f = A[r][col]/A[col][col];
+      if(f===0) continue;
+      for(let cIdx=col;cIdx<n;cIdx++) A[r][cIdx]-=f*A[col][cIdx];
+      z[r]-=f*z[col];
+    }
+  }
+  const x = new Array(n);
+  for(let i=0;i<n;i++) x[i]=z[i]/A[i][i];
+  return x;
+}
+
+/* ============================= CIRCUIT SIMULATION (Modified Nodal Analysis) ============================= */
+function simulate(){
+  const statusEl = document.getElementById('status');
+
+  const resistors = components.filter(c=>c.type==='resistor');
+  const batteries = components.filter(c=>c.type==='battery');
+  const isources  = components.filter(c=>c.type==='currentsource');
+  const ammeters  = components.filter(c=>c.type==='ammeter');
+  const voltmeters= components.filter(c=>c.type==='voltmeter');
+  const wires     = components.filter(c=>c.type==='wire');
+
+  // reset readings
+  ammeters.forEach(c=>c.reading=null);
+  voltmeters.forEach(c=>c.reading=null);
+
+  if(resistors.length===0 && batteries.length===0 && isources.length===0 && ammeters.length===0){
+    statusEl.className='status';
+    statusEl.textContent = voltmeters.length ? 'No active circuit — voltmeter has nothing to measure yet.' : 'Place a source and a resistor to begin.';
+    renderComponents(); renderList();
+    return;
+  }
+
+  const uf = makeUF();
+  wires.forEach(w=>{
+    uf.union(baseNode(holes[w.h1]), baseNode(holes[w.h2]));
+  });
+  function nodeOf(holeId){ return uf.find(baseNode(holes[holeId])); }
+
+  // decide ground
+  let ground = null;
+  const railCandidates = ['BR-','TR-','BR+','TR+'];
+  for(const r of railCandidates){
+    // is this rail used by anything?
+    const g = uf.find(r);
+    const used = resistors.some(c=>nodeOf(c.h1)===g||nodeOf(c.h2)===g) ||
+                 batteries.some(c=>nodeOf(c.h1)===g||nodeOf(c.h2)===g) ||
+                 isources.some(c=>nodeOf(c.h1)===g||nodeOf(c.h2)===g) ||
+                 ammeters.some(c=>nodeOf(c.h1)===g||nodeOf(c.h2)===g);
+    if(used){ ground = g; break; }
+  }
+  if(ground===null){
+    if(batteries.length) ground = nodeOf(batteries[0].h2);
+    else if(resistors.length) ground = nodeOf(resistors[0].h1);
+    else if(isources.length) ground = nodeOf(isources[0].h2);
+    else if(ammeters.length) ground = nodeOf(ammeters[0].h2);
+  }
+
+  // collect active nodes
+  const nodeSet = new Set();
+  resistors.forEach(c=>{ nodeSet.add(nodeOf(c.h1)); nodeSet.add(nodeOf(c.h2)); });
+  batteries.forEach(c=>{ nodeSet.add(nodeOf(c.h1)); nodeSet.add(nodeOf(c.h2)); });
+  isources.forEach(c=>{ nodeSet.add(nodeOf(c.h1)); nodeSet.add(nodeOf(c.h2)); });
+  ammeters.forEach(c=>{ nodeSet.add(nodeOf(c.h1)); nodeSet.add(nodeOf(c.h2)); });
+  nodeSet.delete(ground);
+
+  const nodeList = Array.from(nodeSet);
+  const nodeIdx = {};
+  nodeList.forEach((n,i)=>nodeIdx[n]=i);
+  const n = nodeList.length;
+
+  const branches = [...batteries, ...ammeters]; // each = 0V for ammeter, V for battery
+  const m = branches.length;
+
+  const size = n+m;
+  if(size===0){
+    statusEl.className='status';
+    statusEl.textContent = 'Nothing to solve yet — add a source.';
+    renderComponents(); renderList();
+    return;
+  }
+
+  const A = Array.from({length:size},()=>new Array(size).fill(0));
+  const z = new Array(size).fill(0);
+
+  function idxOf(node){ return node===ground ? -1 : nodeIdx[node]; }
+
+  resistors.forEach(c=>{
+    if(!c.value || c.value<=0) return;
+    const g = 1/c.value;
+    const ai = idxOf(nodeOf(c.h1)), bi = idxOf(nodeOf(c.h2));
+    if(ai>=0) A[ai][ai]+=g;
+    if(bi>=0) A[bi][bi]+=g;
+    if(ai>=0 && bi>=0){ A[ai][bi]-=g; A[bi][ai]-=g; }
+  });
+
+  isources.forEach(c=>{
+    const ai = idxOf(nodeOf(c.h1)), bi = idxOf(nodeOf(c.h2));
+    if(ai>=0) z[ai]+=c.value;
+    if(bi>=0) z[bi]-=c.value;
+  });
+
+  branches.forEach((br,k)=>{
+    const ai = idxOf(nodeOf(br.h1)), bi = idxOf(nodeOf(br.h2));
+    const ki = n+k;
+    if(ai>=0){ A[ai][ki]+=1; A[ki][ai]+=1; }
+    if(bi>=0){ A[bi][ki]-=1; A[ki][bi]-=1; }
+    z[ki]+= (br.type==='battery') ? br.value : 0;
+  });
+
+  const A2 = A.map(row=>row.slice());
+  const z2 = z.slice();
+  const x = solveLinear(A2, z2);
+
+  if(x===null){
+    statusEl.className='status err';
+    statusEl.textContent = '⚠ Circuit cannot be solved — check for a short circuit (e.g. a wire straight across a battery) or a dangling source with no return path.';
+    renderComponents(); renderList();
+    return;
+  }
+
+  const V = {};
+  V[ground]=0;
+  nodeList.forEach((node,i)=>V[node]=x[i]);
+
+  ammeters.forEach((c,i)=>{
+    const k = batteries.length + i; // branches = [...batteries, ...ammeters]
+    c.reading = x[n+k];
+  });
+
+  voltmeters.forEach(c=>{
+    const na = nodeOf(c.h1), nb = nodeOf(c.h2);
+    const va = (na===ground) ? 0 : (na in nodeIdx ? V[na] : undefined);
+    const vb = (nb===ground) ? 0 : (nb in nodeIdx ? V[nb] : undefined);
+    if(va===undefined || vb===undefined) c.reading = null;
+    else c.reading = va-vb;
+  });
+
+  const totalR = resistors.length, totalSrc = batteries.length+isources.length;
+  statusEl.className='status';
+  statusEl.textContent = `✓ Solved — ${nodeList.length+1} electrical nodes, ${totalR} resistor(s), ${totalSrc} source(s), ground = ${ground}.`;
+
+  renderComponents();
+  renderList();
+}
+
+renderComponents();
+renderList();
+</script>
+</body>
+</html>
